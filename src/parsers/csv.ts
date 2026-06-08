@@ -45,7 +45,23 @@ function parseCsvLine(line: string): string[] {
     }
   }
   result.push(current);
-  return result;
+  // Merge cells split by thousand-separator commas inside currency amounts
+  // e.g. ["¥1", "234.56"] → ["¥1,234.56"]
+  const merged: string[] = [];
+  for (let i = 0; i < result.length; i++) {
+    const cell = result[i];
+    if (
+      /^[¥￥]-?\d+$/.test(cell) &&
+      i + 1 < result.length &&
+      /^\d+(\.\d+)?$/.test(result[i + 1])
+    ) {
+      merged.push(cell + "," + result[i + 1]);
+      i++;
+    } else {
+      merged.push(cell);
+    }
+  }
+  return merged;
 }
 
 function hasCsvDateFirst(cells: string[]): boolean {
@@ -106,6 +122,15 @@ export function parseCsv(
     const cells = parseCsvLine(lines[i]);
     const rawDate = cells[colMap.date]?.trim();
     if (!rawDate) continue;
+    const looksLikeDate =
+      DATE_PATTERN.test(rawDate) ||
+      /^\d{4}年\d{1,2}月\d{1,2}日/.test(rawDate) ||
+      /^\d{1,2}[/]\d{1,2}[/]\d{4}/.test(rawDate) ||
+      /^\d{1,2}\s+[a-zA-Z]{3}\s+\d{4}/i.test(rawDate);
+    if (!looksLikeDate) {
+      warnings.push(`行 ${i + 1}: 日期格式无法识别 "${rawDate}"`);
+      continue;
+    }
 
     const rawAmount =
       cells[colMap.amount]?.trim() || "0";

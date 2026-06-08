@@ -22,60 +22,27 @@ function parseKvLine(line: string): { key: string; value: string } | null {
   return { key: m[1].trim(), value: m[2].trim() };
 }
 
-function splitBlocks(content: string): string[] {
-  const blocks: string[] = [];
-  let current: string[] = [];
-  const lines = content.split("\n");
-  for (const line of lines) {
-    if (line.trim() === "") {
-      if (current.length > 0) {
-        blocks.push(current.join("\n"));
-        current = [];
-      }
-    } else {
-      current.push(line);
-    }
-  }
-  if (current.length > 0) blocks.push(current.join("\n"));
-  return blocks;
-}
-
-function blockToRecord(
-  block: string,
+function buildRecord(
+  fields: { date?: string; desc?: string; amount?: string; dir?: string },
   mapping: KvMapping,
-  blockIdx: number
-): { record: BillRecord | null; warnings: string[] } {
-  const warnings: string[] = [];
-  const fields: { date?: string; desc?: string; amount?: string; dir?: string } = {};
-
-  for (const line of block.split("\n")) {
-    const parsed = parseKvLine(line);
-    if (!parsed) {
-      warnings.push(`块 ${blockIdx + 1}: 无法解析行 "${line.trim()}"`);
-      continue;
-    }
-    const { key, value } = parsed;
-    if (mapping.dateKey.test(key)) fields.date = value;
-    else if (mapping.descKey.test(key)) fields.desc = value;
-    else if (mapping.amountKey.test(key)) fields.amount = value;
-    else if (mapping.dirKey.test(key)) fields.dir = value;
-  }
-
+  blockIdx: number,
+  warnings: string[]
+): BillRecord | null {
   if (!fields.date || !fields.amount) {
-    warnings.push(
-      `块 ${blockIdx + 1}: 缺少日期或金额 (date="${fields.date}", amount="${fields.amount}")`
-    );
-    return { record: null, warnings };
+    if (fields.date || fields.amount) {
+      warnings.push(
+        `记录 ${blockIdx + 1}: 缺少日期或金额 (date="${fields.date}", amount="${fields.amount}")`
+      );
+    }
+    return null;
   }
-
   const rawAmount = fields.amount.replace(/[¥￥,\s]/g, "");
   const amount = Math.abs(parseFloat(rawAmount));
   if (isNaN(amount)) {
-    warnings.push(`块 ${blockIdx + 1}: 金额解析失败 "${fields.amount}"`);
-    return { record: null, warnings };
+    warnings.push(`记录 ${blockIdx + 1}: 金额解析失败 "${fields.amount}"`);
+    return null;
   }
 
-  const desc = fields.desc || "";
   let direction: "income" | "expense";
   if (fields.dir) {
     if (/收入|入账|收款|credit|in|收/i.test(fields.dir))
@@ -88,16 +55,62 @@ function blockToRecord(
   }
 
   return {
-    record: {
-      date: fields.date,
-      description: desc,
-      amount,
-      currency: "CNY",
-      direction,
-      category: "",
-    },
-    warnings,
+    date: fields.date,
+    description: fields.desc || "",
+    amount,
+    currency: "CNY",
+    direction,
+    category: "",
   };
+}
+
+function extractRecords(
+  lines: string[],
+  mapping: KvMapping
+): { records: BillRecord[]; warnings: string[] } {
+  const records: BillRecord[] = [];
+  const warnings: string[] = [];
+  let current: { date?: string; desc?: string; amount?: string; dir?: string } = {};
+  let blockIdx = 0;
+
+  function flush() {
+    const record = buildRecord(current, mapping, blockIdx, warnings);
+    if (record) {
+      records.push(record);
+      blockIdx++;
+    }
+    current = {};
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === "") {
+      flush();
+      continue;
+    }
+    const parsed = parseKvLine(trimmed);
+    if (!parsed) {
+      warnings.push(`无法解析行 "${trimmed}"`);
+      continue;
+    }
+    const { key, value } = parsed;
+
+    if (mapping.dateKey.test(key)) {
+      if (current.date) flush();
+      current.date = value;
+    } else if (mapping.descKey.test(key)) {
+      current.desc = value;
+    } else if (mapping.amountKey.test(key)) {
+      if (current.amount) flush();
+      current.amount = value;
+    } else if (mapping.dirKey.test(key)) {
+      if (current.dir) flush();
+      current.dir = value;
+    }
+  }
+  flush();
+
+  return { records, warnings };
 }
 
 export function isKeyValueFormat(content: string): boolean {
@@ -109,20 +122,6 @@ export function isKeyValueFormat(content: string): boolean {
 export function parseKeyValue(
   content: string
 ): { records: BillRecord[]; warnings: string[] } {
-  const records: BillRecord[] = [];
-  const warnings: string[] = [];
-  const blocks = splitBlocks(content);
-  const mapping = KV_PATTERNS[0];
-
-  for (let i = 0; i < blocks.length; i++) {
-    const { record, warnings: blockWarnings } = blockToRecord(
-      blocks[i],
-      mapping,
-      i
-    );
-    warnings.push(...blockWarnings);
-    if (record) records.push(record);
-  }
-
-  return { records, warnings };
+  const lines = content.split("\n");
+  return extractRecords(lines, KV_PATTERNS[0]);
 }

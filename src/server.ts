@@ -14,6 +14,14 @@ function safeResolve(inputPath: string): string {
   return resolved;
 }
 
+async function safeRealpath(inputPath: string): Promise<string> {
+  const real = await fs.realpath(path.resolve(BASE_DIR, inputPath));
+  if (!real.startsWith(BASE_DIR + path.sep) && real !== BASE_DIR) {
+    throw new Error(`路径越界(符号链接): ${inputPath}`);
+  }
+  return real;
+}
+
 const server = new McpServer({
   name: "finance-bill-mcp",
   version: "1.0.0",
@@ -27,11 +35,13 @@ server.tool(
     directory: z.string().describe("要扫描的目录路径"),
   },
   async ({ directory }) => {
-    const dirPath = safeResolve(directory);
+    const dirPath = await safeRealpath(directory);
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     const files = await Promise.all(
       entries
-        .filter((e) => e.isFile() && e.name.endsWith(".md"))
+        .filter(
+          (e) => e.isFile() && e.name.toLowerCase().endsWith(".md")
+        )
         .map(async (e) => {
           const fullPath = path.join(dirPath, e.name);
           const stat = await fs.stat(fullPath);
@@ -56,8 +66,8 @@ server.tool(
     file_path: z.string().describe("账单文件的完整路径"),
   },
   async ({ file_path }) => {
-    const resolved = safeResolve(file_path);
-    if (!resolved.endsWith(".md")) {
+    const resolved = await safeRealpath(file_path);
+    if (!resolved.toLowerCase().endsWith(".md")) {
       throw new Error(`仅支持读取 .md 文件: ${file_path}`);
     }
     const content = await fs.readFile(resolved, "utf-8");

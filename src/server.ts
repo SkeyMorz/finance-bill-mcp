@@ -1,6 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import * as fs from "fs/promises";
+import * as path from "path";
+
+const BASE_DIR = process.cwd();
+
+function safeResolve(inputPath: string): string {
+  const resolved = path.resolve(BASE_DIR, inputPath);
+  if (!resolved.startsWith(BASE_DIR + path.sep) && resolved !== BASE_DIR) {
+    throw new Error(`路径越界: ${inputPath}`);
+  }
+  return resolved;
+}
 
 const server = new McpServer({
   name: "finance-bill-mcp",
@@ -15,13 +27,23 @@ server.tool(
     directory: z.string().describe("要扫描的目录路径"),
   },
   async ({ directory }) => {
+    const dirPath = safeResolve(directory);
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    const files = await Promise.all(
+      entries
+        .filter((e) => e.isFile() && e.name.endsWith(".md"))
+        .map(async (e) => {
+          const fullPath = path.join(dirPath, e.name);
+          const stat = await fs.stat(fullPath);
+          return {
+            name: e.name,
+            path: fullPath,
+            size_bytes: stat.size,
+          };
+        })
+    );
     return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ files: [] }),
-        },
-      ],
+      content: [{ type: "text", text: JSON.stringify({ files }) }],
     };
   }
 );
@@ -34,12 +56,15 @@ server.tool(
     file_path: z.string().describe("账单文件的完整路径"),
   },
   async ({ file_path }) => {
+    const resolved = safeResolve(file_path);
+    if (!resolved.endsWith(".md")) {
+      throw new Error(`仅支持读取 .md 文件: ${file_path}`);
+    }
+    const content = await fs.readFile(resolved, "utf-8");
+    const fileName = path.basename(resolved);
     return {
       content: [
-        {
-          type: "text",
-          text: JSON.stringify({ content: "", file_name: "" }),
-        },
+        { type: "text", text: JSON.stringify({ content, file_name: fileName }) },
       ],
     };
   }

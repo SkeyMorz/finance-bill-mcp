@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "finance-bill": {
+      "command": "node",
+      "args": ["./dist/server.js"],
+      "env": {
+        "FEISHU_WEBHOOK_URL": "your-webhook-url"
+      }
+    }
+  }
+}

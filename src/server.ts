@@ -3,6 +3,12 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { identifyPlatform } from "./parsers/platform.js";
+import { isMarkdownTable, parseMarkdownTable } from "./parsers/markdown.js";
+import { isCsvFormat, parseCsv } from "./parsers/csv.js";
+import { isKeyValueFormat, parseKeyValue } from "./parsers/keyvalue.js";
+import { normalizeRecords } from "./parsers/normalize.js";
+import type { ParseResult } from "./parsers/types.js";
 
 const BASE_DIR = process.cwd();
 
@@ -89,17 +95,44 @@ server.tool(
     source_file: z.string().describe("来源文件名，用于辅助识别平台"),
   },
   async ({ raw_content, source_file }) => {
+    const platform = identifyPlatform(source_file);
+    const warnings: string[] = [];
+    let records: import("./parsers/types.js").BillRecord[] = [];
+
+    if (isMarkdownTable(raw_content)) {
+      const result = parseMarkdownTable(raw_content);
+      records = result.records;
+      warnings.push(...result.warnings);
+    } else if (isCsvFormat(raw_content)) {
+      const result = parseCsv(raw_content);
+      records = result.records;
+      warnings.push(...result.warnings);
+    } else if (isKeyValueFormat(raw_content)) {
+      const result = parseKeyValue(raw_content);
+      records = result.records;
+      warnings.push(...result.warnings);
+    } else {
+      warnings.push("无法识别账单格式，尝试全部解析器...");
+      const mdResult = parseMarkdownTable(raw_content);
+      const csvResult = parseCsv(raw_content);
+      const kvResult = parseKeyValue(raw_content);
+      const best =
+        [mdResult, csvResult, kvResult].sort(
+          (a, b) => b.records.length - a.records.length
+        )[0];
+      records = best.records;
+      warnings.push(...best.warnings);
+    }
+
+    const normalized = normalizeRecords(records);
+    const result: ParseResult = {
+      platform,
+      records: normalized,
+      parse_warnings: warnings.filter(Boolean),
+    };
+
     return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            platform: "",
-            records: [],
-            parse_warnings: [],
-          }),
-        },
-      ],
+      content: [{ type: "text", text: JSON.stringify(result) }],
     };
   }
 );

@@ -11,6 +11,7 @@ import { normalizeRecords } from "./parsers/normalize.js";
 import type { ParseResult } from "./parsers/types.js";
 import { computeSummary } from "./report/calculator.js";
 import { generateMarkdownReport } from "./report/markdown.js";
+import { sendNotification } from "./notify/sender.js";
 
 const BASE_DIR = process.cwd();
 
@@ -192,13 +193,9 @@ server.tool(
     body: z.string().describe("Markdown 格式的报告正文"),
   },
   async ({ channel, target, subject, body }) => {
+    const result = await sendNotification(channel, target, subject, body);
     return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ success: false, message: "未实现" }),
-        },
-      ],
+      content: [{ type: "text", text: JSON.stringify(result) }],
     };
   }
 );

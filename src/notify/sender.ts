@@ -3,6 +3,28 @@ export interface NotifyResult {
   message: string;
 }
 
+const FETCH_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(url, { ...options, signal: controller.signal });
+    return resp;
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error(`请求超时 (${timeoutMs}ms): ${url}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function sendFeishu(
   target: string,
   subject: string,
@@ -20,17 +42,25 @@ async function sendFeishu(
     },
   };
 
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const resp = await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      FETCH_TIMEOUT_MS
+    );
 
-  const respBody = await resp.text();
-  if (resp.ok) {
-    return { success: true, message: "飞书消息发送成功" };
+    const respBody = await resp.text();
+    if (resp.ok) {
+      return { success: true, message: "飞书消息发送成功" };
+    }
+    return { success: false, message: `飞书发送失败 HTTP ${resp.status}: ${respBody}` };
+  } catch (err) {
+    return { success: false, message: `飞书请求异常: ${err instanceof Error ? err.message : String(err)}` };
   }
-  return { success: false, message: `飞书发送失败 HTTP ${resp.status}: ${respBody}` };
 }
 
 async function sendWecom(
@@ -50,17 +80,25 @@ async function sendWecom(
     },
   };
 
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const resp = await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      FETCH_TIMEOUT_MS
+    );
 
-  const respBody = await resp.text();
-  if (resp.ok) {
-    return { success: true, message: "企业微信消息发送成功" };
+    const respBody = await resp.text();
+    if (resp.ok) {
+      return { success: true, message: "企业微信消息发送成功" };
+    }
+    return { success: false, message: `企业微信发送失败 HTTP ${resp.status}: ${respBody}` };
+  } catch (err) {
+    return { success: false, message: `企业微信请求异常: ${err instanceof Error ? err.message : String(err)}` };
   }
-  return { success: false, message: `企业微信发送失败 HTTP ${resp.status}: ${respBody}` };
 }
 
 async function sendEmail(

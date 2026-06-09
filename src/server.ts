@@ -9,6 +9,8 @@ import { isCsvFormat, parseCsv } from "./parsers/csv.js";
 import { isKeyValueFormat, parseKeyValue } from "./parsers/keyvalue.js";
 import { normalizeRecords } from "./parsers/normalize.js";
 import type { ParseResult } from "./parsers/types.js";
+import { computeSummary } from "./report/calculator.js";
+import { generateMarkdownReport } from "./report/markdown.js";
 
 const BASE_DIR = process.cwd();
 
@@ -164,21 +166,13 @@ server.tool(
     period: z.string().describe("账期，如 2026-03"),
   },
   async ({ bill_data, report_title, period }) => {
+    const summary = computeSummary(bill_data);
+    const report_markdown = generateMarkdownReport(report_title, period, summary);
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify({
-            report_markdown: "",
-            summary: {
-              total_income: 0,
-              total_expense: 0,
-              net: 0,
-              by_platform: {},
-              by_category: {},
-              record_count: 0,
-            },
-          }),
+          text: JSON.stringify({ report_markdown, summary }),
         },
       ],
     };

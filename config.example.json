@@ -1,0 +1,5 @@
+{
+  "feishu_webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/YOUR-TOKEN",
+  "default_period_format": "YYYY-MM",
+  "bill_directory": "sample_data"
+}

@@ -12,6 +12,7 @@ import type { ParseResult } from "./parsers/types.js";
 import { computeSummary } from "./report/calculator.js";
 import { generateMarkdownReport } from "./report/markdown.js";
 import { sendNotification } from "./notify/sender.js";
+import { reconcile } from "./report/reconcile.js";
 
 const BASE_DIR = process.cwd();
 
@@ -234,6 +235,55 @@ server.tool(
     const result = await sendNotification(channel, target, subject, body);
     return {
       content: [{ type: "text", text: JSON.stringify(result) }],
+    };
+  }
+);
+
+// Tool 6: reconcile_platforms
+// 共享的 BillRecord schema（generate_report 和 reconcile_platforms 共用）
+const billRecordSchema = z.object({
+  date: z.string(),
+  description: z.string(),
+  amount: z.number(),
+  currency: z.string(),
+  direction: z.enum(["income", "expense"]),
+  category: z.string(),
+});
+
+server.tool(
+  "reconcile_platforms",
+  "跨平台对账：对两个平台的账单数据进行模糊匹配，找出匹配交易、单边记录和疑似重复",
+  {
+    platform_a_name: z.string().describe("平台A名称，如 alipay / bank_statement"),
+    platform_a_records: z.array(billRecordSchema).describe("平台A的结构化账单记录"),
+    platform_b_name: z.string().describe("平台B名称"),
+    platform_b_records: z.array(billRecordSchema).describe("平台B的结构化账单记录"),
+    date_tolerance_days: z
+      .number()
+      .optional()
+      .default(2)
+      .describe("日期容忍度（天），默认 2"),
+    amount_tolerance_ratio: z
+      .number()
+      .optional()
+      .default(0.05)
+      .describe("金额容忍度比率，默认 0.05（±5%）"),
+  },
+  async ({
+    platform_a_name,
+    platform_a_records,
+    platform_b_name,
+    platform_b_records,
+    date_tolerance_days,
+    amount_tolerance_ratio,
+  }) => {
+    const result = reconcile(
+      { platform: platform_a_name, records: platform_a_records },
+      { platform: platform_b_name, records: platform_b_records },
+      { date_tolerance_days, amount_tolerance_ratio }
+    );
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };
   }
 );

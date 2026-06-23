@@ -22,6 +22,11 @@ function parseKvLine(line: string): { key: string; value: string } | null {
   return { key: m[1].trim(), value: m[2].trim() };
 }
 
+/** 检测分隔符行（Markdown 水平线，用于分隔不同记录块） */
+function isSeparatorLine(line: string): boolean {
+  return /^[-*=_]{3,}\s*$/.test(line.trim());
+}
+
 function buildRecord(
   fields: { date?: string; desc?: string; amount?: string; dir?: string },
   mapping: KvMapping,
@@ -84,13 +89,13 @@ function extractRecords(
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed === "") {
+    if (trimmed === "" || isSeparatorLine(trimmed)) {
       flush();
       continue;
     }
     const parsed = parseKvLine(trimmed);
     if (!parsed) {
-      warnings.push(`无法解析行 "${trimmed}"`);
+      warnings.push(`无法解析行: "${trimmed}"`);
       continue;
     }
     const { key, value } = parsed;
@@ -114,7 +119,10 @@ function extractRecords(
 }
 
 export function isKeyValueFormat(content: string): boolean {
-  const lines = content.split("\n").filter((l) => l.trim());
+  const lines = content.split("\n").filter((l) => {
+    const t = l.trim();
+    return t !== "" && !isSeparatorLine(t);
+  });
   const kvLines = lines.filter((l) => parseKvLine(l) !== null);
   return kvLines.length >= lines.length * 0.5 && kvLines.length >= 3;
 }

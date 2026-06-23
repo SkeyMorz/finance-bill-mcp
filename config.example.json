@@ -1,5 +1,14 @@
 {
   "feishu_webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/YOUR-TOKEN",
+  "wecom_webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR-KEY",
+  "email_smtp": {
+    "host": "smtp.example.com",
+    "port": 587,
+    "user": "your-email@example.com",
+    "pass": "your-smtp-password-or-app-token",
+    "from": "your-email@example.com"
+  },
+  "note": "以上 SMTP 配置对应环境变量 SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM。端口 587=STARTTLS, 465=SMTPS, 25=plain SMTP",
   "default_period_format": "YYYY-MM",
   "bill_directory": "sample_data"
 }

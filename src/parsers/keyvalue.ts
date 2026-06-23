@@ -1,4 +1,4 @@
-import { BillRecord } from "./types.js";
+import { BillRecord, ParserRawResult } from "./types.js";
 import { detectCurrency } from "./normalize.js";
 
 interface KvMapping {
@@ -73,17 +73,27 @@ function buildRecord(
 function extractRecords(
   lines: string[],
   mapping: KvMapping
-): { records: BillRecord[]; warnings: string[] } {
+): ParserRawResult {
   const records: BillRecord[] = [];
   const warnings: string[] = [];
   let current: { date?: string; desc?: string; amount?: string; dir?: string } = {};
   let blockIdx = 0;
+  let flushAttempts = 0;   // 有数据可 flush 的次数
+  let successfulFlushes = 0;
+
+  function hasData() {
+    return !!(current.date || current.desc || current.amount || current.dir);
+  }
 
   function flush() {
-    const record = buildRecord(current, mapping, blockIdx, warnings);
-    if (record) {
-      records.push(record);
-      blockIdx++;
+    if (hasData()) {
+      flushAttempts++;
+      const record = buildRecord(current, mapping, blockIdx, warnings);
+      if (record) {
+        records.push(record);
+        blockIdx++;
+        successfulFlushes++;
+      }
     }
     current = {};
   }
@@ -116,7 +126,9 @@ function extractRecords(
   }
   flush();
 
-  return { records, warnings };
+  // 置信度 = 成功构建记录数 / 尝试 flush 次数
+  const confidence = flushAttempts > 0 ? successfulFlushes / flushAttempts : 0;
+  return { records, warnings, confidence };
 }
 
 export function isKeyValueFormat(content: string): boolean {
@@ -130,7 +142,7 @@ export function isKeyValueFormat(content: string): boolean {
 
 export function parseKeyValue(
   content: string
-): { records: BillRecord[]; warnings: string[] } {
+): ParserRawResult {
   const lines = content.split("\n");
   return extractRecords(lines, KV_PATTERNS[0]);
 }

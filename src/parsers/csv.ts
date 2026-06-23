@@ -1,4 +1,4 @@
-import { BillRecord } from "./types.js";
+import { BillRecord, ParserRawResult } from "./types.js";
 import { detectCurrency } from "./normalize.js";
 
 interface CsvColumnMap {
@@ -95,11 +95,11 @@ export function isCsvFormat(content: string): boolean {
 
 export function parseCsv(
   content: string
-): { records: BillRecord[]; warnings: string[] } {
+): ParserRawResult {
   const records: BillRecord[] = [];
   const warnings: string[] = [];
   const lines = content.split("\n").filter((l) => l.trim());
-  if (lines.length === 0) return { records, warnings };
+  if (lines.length === 0) return { records, warnings, confidence: 0 };
 
   const firstCells = parseCsvLine(lines[0]);
   let colMap: CsvColumnMap | null = null;
@@ -118,6 +118,9 @@ export function parseCsv(
     colMap = { date: 0, description: 1, amount: 2, direction: -1 };
     dataStart = 0;
   }
+
+  // 置信度 = 成功解析行数 / 总数据行数
+  const totalDataRows = lines.length - dataStart;
 
   for (let i = dataStart; i < lines.length; i++) {
     const cells = parseCsvLine(lines[i]);
@@ -162,5 +165,6 @@ export function parseCsv(
     });
   }
 
-  return { records, warnings };
+  const confidence = totalDataRows > 0 ? records.length / totalDataRows : 0;
+  return { records, warnings, confidence };
 }

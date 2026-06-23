@@ -101,30 +101,68 @@ server.tool(
     const platform = identifyPlatform(source_file);
     const warnings: string[] = [];
     let records: import("./parsers/types.js").BillRecord[] = [];
+    let confidence = 1; // 格式已识别时默认高置信度
 
     if (isMarkdownTable(raw_content)) {
       const result = parseMarkdownTable(raw_content);
       records = result.records;
       warnings.push(...result.warnings);
+      confidence = result.confidence;
     } else if (isCsvFormat(raw_content)) {
       const result = parseCsv(raw_content);
       records = result.records;
       warnings.push(...result.warnings);
+      confidence = result.confidence;
     } else if (isKeyValueFormat(raw_content)) {
       const result = parseKeyValue(raw_content);
       records = result.records;
       warnings.push(...result.warnings);
+      confidence = result.confidence;
     } else {
-      warnings.push("无法识别账单格式，尝试全部解析器...");
+      // ─── 兜底策略：格式检测失败，基于置信度选择最优解析器 ───
+      const CONFIDENCE_THRESHOLD = 0.5;
       const mdResult = parseMarkdownTable(raw_content);
       const csvResult = parseCsv(raw_content);
       const kvResult = parseKeyValue(raw_content);
-      const best =
-        [mdResult, csvResult, kvResult].sort(
-          (a, b) => b.records.length - a.records.length
-        )[0];
-      records = best.records;
-      warnings.push(...best.warnings);
+
+      const allResults = [
+        { label: "Markdown", r: mdResult },
+        { label: "CSV", r: csvResult },
+        { label: "KeyValue", r: kvResult },
+      ];
+
+      // 按置信度排序
+      const qualified = allResults.filter(({ r }) => r.confidence >= CONFIDENCE_THRESHOLD);
+
+      if (qualified.length === 1) {
+        // 只有一种解析器可信 → 直接采用
+        const { label, r } = qualified[0];
+        records = r.records;
+        warnings.push(...r.warnings);
+        confidence = r.confidence;
+        warnings.push(`格式自动识别为: ${label}（置信度 ${(r.confidence * 100).toFixed(0)}%）`);
+      } else if (qualified.length >= 2) {
+        // 多种解析器都可信 → 选置信度最高的
+        qualified.sort((a, b) => b.r.confidence - a.r.confidence);
+        const { label, r } = qualified[0];
+        records = r.records;
+        warnings.push(...r.warnings);
+        confidence = r.confidence;
+        warnings.push(
+          `多个解析器均达到置信度阈值: ${qualified.map(q => `${q.label}(${(q.r.confidence * 100).toFixed(0)}%)`).join(", ")} → 选用 ${label}`
+        );
+      } else {
+        // 无解析器达到置信度阈值 → 空结果 + 完整诊断信息
+        const best = allResults.sort((a, b) => b.r.confidence - a.r.confidence)[0];
+        records = [];
+        confidence = 0;
+        warnings.push(
+          `⛔ 所有解析器置信度均低于阈值 ${CONFIDENCE_THRESHOLD * 100}% — 文件可能不是账单或格式不受支持。`,
+          `各解析器得分: Markdown=${(mdResult.confidence * 100).toFixed(0)}% CSV=${(csvResult.confidence * 100).toFixed(0)}% KeyValue=${(kvResult.confidence * 100).toFixed(0)}%`,
+          `建议: 人工检查文件内容，确认是否为有效账单数据。`,
+          ...best.r.warnings
+        );
+      }
     }
 
     const normalized = normalizeRecords(records);

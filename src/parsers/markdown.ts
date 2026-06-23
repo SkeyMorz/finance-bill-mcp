@@ -1,4 +1,4 @@
-import { BillRecord } from "./types.js";
+import { BillRecord, ParserRawResult } from "./types.js";
 import { detectCurrency } from "./normalize.js";
 
 interface ColumnMap {
@@ -56,7 +56,7 @@ export function isMarkdownTable(content: string): boolean {
 
 export function parseMarkdownTable(
   content: string
-): { records: BillRecord[]; warnings: string[] } {
+): ParserRawResult {
   const records: BillRecord[] = [];
   const warnings: string[] = [];
   const lines = content.split("\n");
@@ -72,17 +72,20 @@ export function parseMarkdownTable(
 
   if (rows.length < 2) {
     warnings.push("Markdown 表格行数不足");
-    return { records, warnings };
+    return { records, warnings, confidence: 0 };
   }
 
   const colMap = buildColumnMap(rows[0]);
   if (!colMap) {
     warnings.push("无法识别 Markdown 表格列头");
-    return { records, warnings };
+    return { records, warnings, confidence: 0 };
   }
 
   let dataStart = 1;
   if (isSeparatorRow(rows[1])) dataStart = 2;
+
+  // 置信度 = 成功解析行数 / 总数据行数
+  const totalDataRows = rows.length - dataStart;
 
   for (let i = dataStart; i < rows.length; i++) {
     const cells = rows[i];
@@ -124,5 +127,6 @@ export function parseMarkdownTable(
     });
   }
 
-  return { records, warnings };
+  const confidence = totalDataRows > 0 ? records.length / totalDataRows : 0;
+  return { records, warnings, confidence };
 }

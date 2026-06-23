@@ -1,5 +1,29 @@
 import { BillRecord } from "./types.js";
 
+// ---------------------------------------------------------------------------
+// 货币检测 — 从金额字符串和描述中识别币种
+// ---------------------------------------------------------------------------
+const CURRENCY_SYMBOLS: [RegExp, string][] = [
+  // 符号或 ISO 代码（顺序重要：€/£/$ 精确匹配避免冲突；¥ 放最后兜底）
+  [/€|EUR/i, "EUR"],
+  [/£|GBP/i, "GBP"],
+  [/\$|USD/i, "USD"],
+  [/₩|KRW/i, "KRW"],
+  [/¥|￥|元|CNY|RMB/i, "CNY"],
+];
+
+/**
+ * 从原始金额字符串和交易描述中检测货币。
+ * 优先级：金额符号 > 描述关键词 > 默认 CNY
+ */
+export function detectCurrency(rawAmount: string, description?: string): string {
+  const haystack = rawAmount + (description ? " " + description : "");
+  for (const [pattern, code] of CURRENCY_SYMBOLS) {
+    if (pattern.test(haystack)) return code;
+  }
+  return "CNY";
+}
+
 const CATEGORY_RULES: [RegExp, string][] = [
   [/工资|薪资|salary|payroll/i, "人力成本"],
   [/房租|租金|rent|lease/i, "房租"],

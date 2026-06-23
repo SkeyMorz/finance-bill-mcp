@@ -1,4 +1,5 @@
 import { BillRecord } from "./types.js";
+import { detectCurrency } from "./normalize.js";
 
 interface KvMapping {
   dateKey: RegExp;
@@ -63,7 +64,7 @@ function buildRecord(
     date: fields.date,
     description: fields.desc || "",
     amount,
-    currency: "CNY",
+    currency: detectCurrency(rawAmount, fields.desc || ""),
     direction,
     category: "",
   };

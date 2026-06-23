@@ -1,4 +1,5 @@
 import { BillRecord } from "./types.js";
+import { detectCurrency } from "./normalize.js";
 
 interface ColumnMap {
   date: number;
@@ -117,7 +118,7 @@ export function parseMarkdownTable(
       date: rawDate,
       description: desc,
       amount,
-      currency: "CNY",
+      currency: detectCurrency(rawAmount, desc),
       direction,
       category: "",
     });

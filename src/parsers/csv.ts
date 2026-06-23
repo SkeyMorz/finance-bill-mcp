@@ -1,4 +1,5 @@
 import { BillRecord } from "./types.js";
+import { detectCurrency } from "./normalize.js";
 
 interface CsvColumnMap {
   date: number;
@@ -155,7 +156,7 @@ export function parseCsv(
       date: rawDate,
       description: desc,
       amount,
-      currency: "CNY",
+      currency: detectCurrency(rawAmount, desc),
       direction: guessDirectionCsv(desc, rawAmount, dirCell),
       category: "",
     });
